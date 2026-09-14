@@ -26,6 +26,14 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Usamos la cámara para escanear el QR de los locales y de los envases Condevuelta.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Plain HTTP only to local addresses (dev backend on localhost). -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

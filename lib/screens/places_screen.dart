@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/place_badge.dart';
 import '../widgets/pressable.dart';
 
-/// Discovery (not registration): where the carnet can be used.
+/// Discovery (not registration): where the app can be used.
 class PlacesScreen extends StatefulWidget {
   const PlacesScreen({super.key});
 
@@ -30,7 +31,8 @@ class _PlacesScreenState extends State<PlacesScreen> {
     final result = q.isEmpty
         ? [...places]
         : places.where((p) => p.name.toLowerCase().contains(q) || p.category.toLowerCase().contains(q)).toList();
-    return result..sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
+    // Nearest first when distances are known; otherwise keep the API order.
+    return result..sort((a, b) => (a.distanceMeters ?? 1 << 30).compareTo(b.distanceMeters ?? 1 << 30));
   }
 
   void _select(int id) => setState(() => _selectedId = _selectedId == id ? null : id);
@@ -49,7 +51,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
             children: [
               Text('Locales', style: AppText.title),
               const SizedBox(height: 4),
-              const Text('Donde puedes usar tu carnet.', style: AppText.body),
+              const Text('Donde puedes usar Condevuelta.', style: AppText.body),
               const SizedBox(height: 16),
               TextField(
                 controller: _search,
@@ -344,8 +346,6 @@ class _PlaceCard extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  static const _tileColors = [AppColors.pinkSoft, AppColors.yellow, AppColors.green, AppColors.sky, AppColors.lime];
-
   @override
   Widget build(BuildContext context) {
     return Pressable(
@@ -362,16 +362,7 @@ class _PlaceCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: _tileColors[place.id % _tileColors.length],
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(place.name[0], style: AppText.title.copyWith(fontSize: 26)),
-            ),
+            PlaceBadge(place: place),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -379,7 +370,10 @@ class _PlaceCard extends StatelessWidget {
                 children: [
                   Text(place.name, style: AppText.label.copyWith(fontSize: 16)),
                   const SizedBox(height: 2),
-                  Text('${place.category} · ${place.distanceLabel}', style: AppText.caption),
+                  Text(
+                    [place.category, if (place.distanceLabel != null) place.distanceLabel!].join(' · '),
+                    style: AppText.caption,
+                  ),
                   if (place.requiresGuarantee) ...[
                     const SizedBox(height: 4),
                     Text('Pide garantía por envase', style: AppText.caption.copyWith(color: AppColors.pinkDark)),

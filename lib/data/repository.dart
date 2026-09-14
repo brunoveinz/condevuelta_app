@@ -1,22 +1,30 @@
 import 'models.dart';
 
-/// Everything the app needs from the backend. The customer-facing endpoints
-/// don't exist yet in ../web (see AGENTS.txt, section 6), so the app runs on
-/// [MockRepository] until an ApiRepository is written against the real API.
+/// Everything the app needs from the backend. [ApiRepository] talks to ../web
+/// (app clientes_app, /api/app/); [MockRepository] serves sample data.
 abstract class CondevueltaRepository {
+  /// The customer of a stored session, or null if there is none.
+  Future<Customer?> restoreSession();
+
   Future<AppConfig> fetchConfig();
 
   /// Sends a one-time login code to [email].
   Future<void> requestLoginCode(String email);
 
-  /// Exchanges the code for a session. Returns the customer account.
-  Future<Customer> verifyLoginCode({required String email, required String code});
+  /// Exchanges the code for a session. [isNewAccount] is false for a
+  /// customer who already had an account (welcome back).
+  Future<({Customer customer, bool isNewAccount})> verifyLoginCode({required String email, required String code});
 
   Future<Customer> updateName(String name);
 
   Future<List<Loan>> fetchLoans();
 
   Future<List<Place>> fetchPlaces();
+
+  /// Tells what a scanned QR is (a local, a container...).
+  Future<ScanResult> resolveScan(String rawValue);
+
+  Future<void> signOut();
 }
 
 /// In-memory backend with realistic sample data, for building the UI.
@@ -76,6 +84,12 @@ class MockRepository implements CondevueltaRepository {
   ];
 
   @override
+  Future<Customer?> restoreSession() async => null;
+
+  @override
+  Future<void> signOut() async => _customer = null;
+
+  @override
   Future<AppConfig> fetchConfig() async {
     return const AppConfig(cardRegistrationEnabled: true);
   }
@@ -84,16 +98,17 @@ class MockRepository implements CondevueltaRepository {
   Future<void> requestLoginCode(String email) => Future.delayed(_latency);
 
   @override
-  Future<Customer> verifyLoginCode({required String email, required String code}) async {
+  Future<({Customer customer, bool isNewAccount})> verifyLoginCode({required String email, required String code}) async {
     await Future.delayed(_latency);
     if (code.length != 6) {
       throw const FormatException('El código tiene 6 dígitos.');
     }
-    return _customer = Customer(
+    final customer = _customer = Customer(
       email: email,
       name: '',
       carnetToken: 'CDV-${email.hashCode.toUnsigned(32).toRadixString(36).toUpperCase()}',
     );
+    return (customer: customer, isNewAccount: true);
   }
 
   @override
@@ -164,5 +179,17 @@ class MockRepository implements CondevueltaRepository {
   Future<List<Place>> fetchPlaces() async {
     await Future.delayed(_latency);
     return _places;
+  }
+
+  @override
+  Future<ScanResult> resolveScan(String rawValue) async {
+    await Future.delayed(_latency);
+    final value = rawValue.trim().toUpperCase();
+    if (value.contains('/R/')) return ScannedPlace(_places.first);
+    if (value.startsWith('CDV-')) return const ScannedCustomer();
+    if (RegExp(r'^[A-Z]{2}-?\d+$').hasMatch(value)) {
+      return ScannedContainer(code: value, containerType: 'Bowl mediano', place: _places[1], status: 'available');
+    }
+    return const ScannedUnknown();
   }
 }

@@ -47,6 +47,38 @@ Decided (2026-09-14, see PLAN.txt):
     locals, active loans, due dates and history. There are NO
     customer-initiated container requests in the MVP.
   - Login: one-time code sent by EMAIL. No passwords.
+  - Login codes are generated, emailed and verified by OUR Django backend
+    (../web), permanently. NO Firebase / third-party auth. Planned shape:
+    POST request-code {email} -> 6-digit code (hashed, ~10 min, attempt and
+    rate limits, single use) emailed via Celery; POST verify-code
+    {email, code} -> {token (DRF), needs_profile}. Provider: current SMTP for
+    dev, Amazon SES before launch.
+  - CURRENT PHASE (2026-09-14): backend work for the app is ALLOWED, but only
+    on the ../web branch `app-mobile-integration` (never on produccion).
+    Everything lives in a new Django app `clientes_app` (no changes to
+    existing models): CustomerAccount (+ Django User in group "clientes", DRF
+    token), CustomerAccountLink -> LocalCustomer, LoginCode, AppConfig.
+    Endpoints under /api/app/: config/, auth/request-code/, auth/verify-code/,
+    auth/logout/, me/ (GET/PATCH), loans/, places/. On verify, LocalCustomers
+    with the same (now verified) email are linked automatically.
+    In DEBUG the login code is also logged by the web container.
+  - The app talks to that API by default (ApiRepository, lib/config/env.dart):
+    iOS simulator -> http://localhost:8000, Android emulator ->
+    http://10.0.2.2:8000, release -> https://condevuelta.cl, override with
+    --dart-define=API_BASE_URL=... ; --dart-define=USE_MOCK=true for mock data.
+    Approved packages: http, flutter_secure_storage (token in Keychain/Keystore),
+    mobile_scanner (camera QR scanning), qr_flutter (real, scannable QR).
+  - Navigation (2026-09-14): tabs Inicio · Envases · [raised QR button] ·
+    Locales · Perfil. The center button opens QrHubScreen with two modes:
+    "Mi QR" (show it at the cashier) and "Escanear". The app opens on Inicio,
+    not on the QR. Scanning sends the raw text to POST /api/app/scan/ and the
+    backend says what it is: place (/r/<token>/ or /loyalty/<id>/ of a local
+    that uses the app), container (LocalContainer.code, bare or at the end of
+    a URL / ?code=), customer (someone's QR) or unknown. Add new QR kinds
+    (events...) in ../web clientes_app/scan.py, not in the app.
+  - Not built yet: operator-side carnet scan in the web panel (the other way
+    to link an account to a local), local coordinates/category (places come
+    without them; the app spreads pins on the stylized map).
   - ONE global customer account, linked to many LocalCustomer records
     (one per local the customer joined).
   - ONBOARDING HAPPENS ONCE, right after installing the app — never per

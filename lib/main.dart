@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'config/env.dart';
+import 'data/api_client.dart';
+import 'data/api_repository.dart';
 import 'data/repository.dart';
 import 'screens/auth_screens.dart';
 import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/ready_screen.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 
@@ -17,9 +21,12 @@ void main() {
       systemNavigationBarColor: Colors.transparent,
     ),
   );
-  // TODO: swap MockRepository for an ApiRepository once the customer
-  // endpoints exist in ../web (see AGENTS.txt, section 6).
-  runApp(CondevueltaApp(state: AppState(MockRepository())));
+  final CondevueltaRepository repository =
+      Env.useMockData ? MockRepository() : ApiRepository(ApiClient(baseUrl: Env.apiBaseUrl));
+  final state = AppState(repository);
+  // Not awaited: the tutorial shows while the stored session is checked.
+  state.restoreSession();
+  runApp(CondevueltaApp(state: state));
 }
 
 class CondevueltaApp extends StatelessWidget {
@@ -71,6 +78,7 @@ class _StageSwitcher extends StatelessWidget {
           AppStage.email => const EmailScreen(),
           AppStage.code => const CodeScreen(),
           AppStage.name => const NameScreen(),
+          AppStage.ready => const ReadyScreen(),
           AppStage.home => const HomeShell(),
         },
       ),

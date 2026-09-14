@@ -1,10 +1,11 @@
 import 'package:flutter/widgets.dart';
 
+import '../data/api_client.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 
 /// Top-level stages of the app. The tutorial runs once, right after install.
-enum AppStage { onboarding, email, code, name, home }
+enum AppStage { onboarding, email, code, name, ready, home }
 
 /// Single source of truth for session and data. Plain ChangeNotifier to
 /// avoid extra packages (state management package still to be decided).
@@ -27,6 +28,9 @@ class AppState extends ChangeNotifier {
   /// True the first time the home appears after sign-up, to celebrate it.
   bool justSignedUp = false;
 
+  /// The customer already had an account: the celebration says "welcome back".
+  bool isReturning = false;
+
   /// Used by screens to pick the transition direction.
   bool get isGoingBack => stage.index < _previousStage.index;
 
@@ -40,6 +44,15 @@ class AppState extends ChangeNotifier {
     _previousStage = stage;
     stage = next;
     errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Picks up a stored session while the tutorial plays.
+  Future<void> restoreSession() async {
+    final restored = await _repository.restoreSession();
+    if (restored == null) return;
+    customer = restored;
+    email = restored.email;
     notifyListeners();
   }
 
@@ -66,9 +79,16 @@ class AppState extends ChangeNotifier {
   Future<bool> verifyCode(String code) async {
     var ok = false;
     await _run(() async {
-      customer = await _repository.verifyLoginCode(email: email, code: code);
+      final result = await _repository.verifyLoginCode(email: email, code: code);
+      customer = result.customer;
       ok = true;
-      _goTo(customer!.name.isEmpty ? AppStage.name : AppStage.home);
+      isReturning = !result.isNewAccount;
+      if (result.customer.name.isEmpty) {
+        _goTo(AppStage.name);
+      } else {
+        justSignedUp = result.isNewAccount;
+        _goTo(AppStage.ready);
+      }
     });
     return ok;
   }
@@ -81,10 +101,17 @@ class AppState extends ChangeNotifier {
     }
     await _run(() async {
       customer = await _repository.updateName(name);
+      // Finishing the profile is the sign-up moment (the backend sends the
+      // welcome email here), even for an account created earlier but left
+      // without a name.
+      isReturning = false;
       justSignedUp = true;
-      _goTo(AppStage.home);
+      _goTo(AppStage.ready);
     });
   }
+
+  /// Called by the welcome celebration when it finishes.
+  void enterHome() => _goTo(AppStage.home);
 
   Future<void> loadHome() async {
     isLoadingHome = true;
@@ -98,11 +125,20 @@ class AppState extends ChangeNotifier {
       loans = results[0] as List<Loan>;
       places = results[1] as List<Place>;
       config = results[2] as AppConfig;
+    } on ApiException catch (e) {
+      if (e.isUnauthorized) {
+        signOut();
+        return;
+      }
+      errorMessage = e.message;
     } finally {
       isLoadingHome = false;
       notifyListeners();
     }
   }
+
+  /// Resolves a scanned QR. Errors (ApiException) are shown by the scanner.
+  Future<ScanResult> resolveScan(String rawValue) => _repository.resolveScan(rawValue);
 
   void acknowledgeWelcome() {
     justSignedUp = false;
@@ -112,6 +148,7 @@ class AppState extends ChangeNotifier {
   void replayTutorial() => _goTo(AppStage.onboarding);
 
   void signOut() {
+    _repository.signOut();
     customer = null;
     email = '';
     loans = const [];
@@ -124,6 +161,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await action();
+    } on ApiException catch (e) {
+      errorMessage = e.message;
     } on FormatException catch (e) {
       errorMessage = e.message;
     } on StateError catch (e) {
