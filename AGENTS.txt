@@ -1,0 +1,327 @@
+AGENTS.txt — Condevuelta Mobile App
+=====================================
+
+Guidance for any AI coding agent working in this directory.
+
+Status: Flutter MVP UI built on MOCK DATA (2026-09-14). Read PLAN.txt (the
+user's product brief) first.
+
+Run it:
+  export PATH="$HOME/development/flutter/bin:$PATH"   (Flutter 3.47, Dart 3.13)
+  ~/Android/Sdk/emulator/emulator -avd uniformados_pixel &
+  flutter run -d emulator-5554
+  flutter analyze
+
+Layout (lib/):
+  main.dart                 app + stage switcher (tutorial -> login -> home)
+  theme/app_theme.dart      brand colors, type ramp, motion curves
+  data/models.dart          Customer, Place (~Local), Loan (~LocalLoan), AppConfig
+  data/repository.dart      CondevueltaRepository interface + MockRepository
+  state/app_state.dart      AppState (ChangeNotifier) + AppScope (InheritedNotifier)
+  screens/                  onboarding, auth (email/code/name), home_shell,
+                            carnet, loans, places, profile
+  widgets/                  pressable, primary_button, qr_code, countdown_ring,
+                            loan_tile, brand
+  utils/date_format.dart    Spanish dates without intl
+Assets: assets/fonts (Baloo, Outfit from ../web), assets/images (mascota.png,
+logo_mark.png rendered from ../web logonew.svg).
+
+Known placeholders:
+  - MockRepository: swap for an ApiRepository when the customer endpoints exist.
+  - QrCode paints a QR-looking pattern, NOT a scannable QR (needs a QR package,
+    pending approval).
+  - The tutorial shows every launch (persisting "seen" needs shared_preferences,
+    pending approval). Session is not persisted either (needs secure storage).
+  - "Agregar tarjeta" and "Ayuda" show a "coming soon" message.
+
+Decided (2026-09-14, see PLAN.txt):
+  - Framework: FLUTTER (cross-platform iOS + Android).
+  - Target user of the MVP: END CUSTOMERS ("usuarios de calle") of SaaS locals
+    that use Condevuelta — the LocalCustomer flow (clientes_local,
+    envases_local, prestamos_local, fidelizacion_local in ../web).
+  - Design is THE top priority: the MVP scope is simple, the visual/UX quality
+    must be premium and advanced. Never ship a "default Material" look.
+  - Core mechanic = "CARNET QR": the app shows the customer's personal QR.
+    In store, the OPERATOR scans it and lends the container (loans are still
+    created by the operator, exactly as today). The app shows the customer's
+    locals, active loans, due dates and history. There are NO
+    customer-initiated container requests in the MVP.
+  - Login: one-time code sent by EMAIL. No passwords.
+  - ONE global customer account, linked to many LocalCustomer records
+    (one per local the customer joined).
+  - ONBOARDING HAPPENS ONCE, right after installing the app — never per
+    local. It's a brief, highly animated tutorial that teaches how the app
+    works (Vytal-style), then email-code login, then a minimal profile.
+    Draft of the tutorial steps: 1) Pide tu comida en retornable,
+    2) Muestra tu carnet QR, 3) Disfruta, 4) Devuélvelo a tiempo.
+  - THE ACCOUNT WORKS IN ANY LOCAL. There is NO "join a local" step or form.
+    The customer just shows the carnet; the link to that local is created
+    automatically the first time an operator scans it there.
+  - Finding locals is DISCOVERY, not registration: a list/map/search of
+    locals where the carnet can be used.
+  - Product reference: VYTAL (vytal.org, app "VYTAL" on iOS/Android).
+    Their model: download the free app -> register -> show your QR at a
+    partner -> the restaurant scans your QR + the container -> 14 days to
+    return (in-app countdown + reminders) -> auto-charge to the stored card if
+    not returned. Take the simplicity and the tone (friendly, short,
+    direct); don't copy their branding.
+  - OUT of the MVP: loyalty cards / Apple-Google Wallet (fidelizacion_local).
+    Per the user it's a separate thing that never worked in practice — do not
+    build on it or surface it in the app.
+  - Future use case: EVENTS (e.g. festivals lending reusable containers).
+    Keep flows, naming and copy generic enough that a "local" could be an
+    event; avoid store-only assumptions.
+  - RETURNS: for now a container is returned ONLY to the local that lent it
+    (containers belong to each local). The app must say clearly where and by
+    when ("Devuélvelo en <Local> antes del <fecha>"). THIS WILL LIKELY CHANGE
+    (shared network, events): never hardcode "return place = lending local"
+    in UI or logic — always render the return place(s) from the loan data
+    the API sends.
+  - GUARANTEE / CARD: controlled by switches, never hardcoded in the app.
+      a) Global switch (Condevuelta-wide) served by the backend through an
+         app config endpoint, so it can be flipped WITHOUT publishing a new
+         app version. Off = the app hides everything card-related.
+      b) Per-local switch that already exists: LocalLoanConfig.require_guarantee
+         (toggle in the operator settings page).
+    The card is NEVER part of onboarding. Ask for it only when it's needed
+    (a local that requires a guarantee) or optionally from the profile.
+    One card per account, valid in every local.
+    If a local requires a guarantee and the customer has no card, the loan is
+    NOT blocked: the operator can take the guarantee in cash (as the web
+    already allows). The app may suggest adding a card, never force it.
+  - Current code uses ONLY the Flutter SDK (no pub packages beyond the
+    template). State = ChangeNotifier + InheritedNotifier; navigation = a
+    stage switcher + tabs.
+Not decided yet: state management package, packages (qr, secure storage,
+shared_preferences, http), backend changes. Ask before adding any package.
+
+
+1. WHAT CONDEVUELTA IS
+----------------------
+Condevuelta is a SaaS platform for returnable container ("envase") management:
+inventory, loans (prestamos), returns (devoluciones), movements between nodes,
+audits, deliveries and reporting. Domain: reverse logistics / circular economy.
+Users: foodservice companies, restaurants, logistics operators. Country: Chile.
+
+
+2. WHERE THINGS LIVE (sibling directories of this one)
+------------------------------------------------------
+  ../web/                  MAIN PRODUCT. Django 5 backend + web app. This is the
+                           source of truth for data, business rules and the API
+                           the mobile app will consume. Read ../web/AGENT.md and
+                           ../web/CLAUDE.md before touching anything there.
+  ../landing/              Public marketing site (Astro + Tailwind).
+  ../frontend/condevuelta/ Old Next.js 15 experiment. Not in production.
+  ../condevueltaApp/       Old Django prototype (Jan 2025). Legacy, ignore.
+  ../codigos_envase_scripts/ Python scripts that generate container QR/barcodes.
+  ../documentacion/        drawio diagrams (SassDoc, MVP base).
+
+The mobile app is a CLIENT of ../web. It must not have its own database of
+record. Business logic stays in the backend.
+
+
+3. BACKEND FACTS THE MOBILE APP DEPENDS ON (from ../web)
+-------------------------------------------------------
+Stack: Django 5.0, Django REST Framework 3.14, drf-spectacular (OpenAPI 3),
+Django Channels + Daphne (ASGI/WebSockets), Celery + Redis, PostgreSQL,
+AWS S3 for media. Deployed on Heroku. Production site: https://condevuelta.cl
+
+Authentication
+  - Web uses Django sessions. The API uses DRF Token auth.
+  - Get a token:  POST /api-token-auth/   body: {"username": ..., "password": ...}
+                  -> {"token": "..."}
+  - Send it on every request:  Authorization: Token <token>
+  - There is no JWT/refresh flow. Tokens don't expire on their own.
+  - Some API views declare authentication_classes = [SessionAuthentication]
+    or none at all. Check each endpoint before assuming it accepts a token.
+  - Native apps don't need CORS. The backend has no django-cors-headers.
+    Only add it if a web-based client (e.g. Expo web) needs it, and only
+    with the user's approval (see dependency policy).
+
+API conventions
+  - Prefix: /api/  (a few routes use /api/v1/ and /api/v2/ and aren't uniform)
+  - Pagination: PageNumberPagination, PAGE_SIZE = 10
+    -> responses look like {"count", "next", "previous", "results"}
+  - OpenAPI schema: /api/schema/  (Swagger: /api/schema/swagger-ui/,
+    ReDoc: /api/schema/redoc/). Restricted to the "condevuelta" group.
+    Prefer generating/deriving client types from this schema over
+    hand-writing them.
+  - Error messages from the API are in Spanish.
+  - Timezone: America/Santiago. Send and parse datetimes as ISO 8601.
+
+Roles (Django groups). Access control is group-based. After login the web
+redirects each group to its own home. The mobile app should do the same.
+  - condevuelta      Internal Condevuelta team        -> dashboard
+  - administradores  Internal admins
+  - operadores       Store/local operators (OperadorLocal model)
+  - representantes   Client company representatives  -> representantes panel
+  - supervisores     Supervisors                     -> supervisores panel
+  - clientes         End customers                   -> clientes view
+  DRF permission classes: IsCondevueltaMember,
+  IsCondevueltaMemberOrRepresentante (../web/condevuelta/permissions.py),
+  IsOperatorOfLocal (../web/fidelizacion_local/api/permissions.py).
+  Most existing API endpoints are IsCondevueltaMember-only. Operator and
+  representative flows may need new endpoints (see section 5).
+
+Relevant existing endpoints (non-exhaustive; always verify in the code or schema)
+  envases        /api/read-qr/, /api/create/, /api/retire/broken/container, ...
+  prestamos      /api/crear-prestamo/
+  movimientos    /api/movimiento/, /api/nuevomovimiento/,
+                 /api/nuevomovimiento/batch/, monthly metrics under /api/v1/movimientos/
+  locales        /api/v1/locales/..., /api/v2/locales/local/{deliveries,returns,
+                 stock,cementery}/<local_id>/
+  notificaciones /api/v1/notificaciones/...
+  delivery       /api/retirosDelivery/            (DRF router)
+  local apps     /api/local-containers/, /api/local-container-types/,
+                 /api/local-loans/, /api/clients_store/   (DRF routers)
+  fidelizacion   /api/fidelizacion/... (loyalty cards, Apple/Google Wallet passes)
+  validation     /api/validar/envase/, /api/validar/suscripcion/
+  Each Django app registers its routes in ../web/<app>/api/urls.py, included
+  from ../web/condevuelta/urls.py.
+
+Other backend features worth knowing
+  - QR codes are central: containers are identified by QR/barcode
+    (qr_manager, envases/read-qr). Camera scanning will be a core mobile feature.
+  - AI chatbot over WebSocket (Django Channels), app condevuelta_ai, route
+    /chatbot/. OperadorLocal users get a reduced tool set.
+  - Apple Wallet / Google Wallet passes and APNs keys already exist for the
+    loyalty module (fidelizacion_local, django-walletpass, aioapns).
+    There is NO general mobile push infrastructure yet (no device-token model,
+    no FCM).
+  - Media (images) is served from AWS S3.
+
+
+4. BRAND / UI
+-------------
+Colors (from ../web/tailwind.config.js):
+  primary     #D90F74  (pink, hover #b30b5f)
+  secondary   #F9B3D0  (light pink)
+  terciary    #feea83  (yellow)
+  quartiary   #9DCA8B  (green)
+  dark blue   #1C244B / #1F264A (text), #03045E
+  light blue  #a4d3f1
+  background  #FEF8F8 / #fef9f1
+The web uses TailwindCSS + Flowbite + Chart.js. Keep the mobile look consistent
+with the web app. Check ../web/website/templates and ../web/website/static for
+reference screens and assets (logo, icons).
+
+
+5. RULES FOR AGENTS
+-------------------
+Language
+  - Code (identifiers, comments, docstrings, commit messages): ENGLISH.
+  - User-facing text (labels, messages, placeholders): SPANISH (Chile).
+  - Legacy backend code is in Spanish. Don't rename it. Just consume it as-is.
+
+Dependencies (CRITICAL, same policy as ../web)
+  - NEVER install or add a dependency (npm, pub, pod, gradle, pip...) without
+    explicit user authorization. Ask first and explain why.
+
+Backend boundary
+  - Work inside this directory by default.
+  - Do NOT modify ../web unless the user explicitly asks for it. If the app
+    needs a new or changed endpoint, describe it (method, path, payload,
+    permissions) and wait for approval.
+  - When backend work is approved, follow ../web/AGENT.md strictly:
+    APIView/ViewSet + DRF permissions, routes in <app>/api/urls.py,
+    transaction.atomic() for multi-write operations, select_related /
+    prefetch_related, type hints and docstrings, tests in the app's tests.py.
+  - NEVER run the ../web test suite (pytest). Bruno runs tests manually.
+    Write the tests and tell him which command to run.
+
+Security
+  - Never hardcode credentials, tokens or API keys. Never commit .env files.
+  - Store the auth token in the platform's secure storage (Keychain /
+    Keystore), never in plain storage.
+  - Don't read or copy values from ../web/.env or ../web/certs.
+
+General
+  - Use environment-based config for the API base URL (local:
+    http://localhost:8000, prod: https://condevuelta.cl).
+  - Handle 401/403 globally: 401 -> back to login, 403 -> "sin permisos" screen.
+  - Handle paginated lists with infinite scroll / "load more" on top of the
+    {count, next, previous, results} format.
+  - Plan for poor connectivity (operators work in stores and plants):
+    clear loading/error states, safe retries, and no duplicated writes
+    (movements, loans).
+
+
+6. LOCAL SAAS CUSTOMER FLOW (what the MVP plugs into)
+-----------------------------------------------------
+Local (locales.Local) flags: manage_clients, manage_containers, manage_loans,
+manage_loyalty, public_signup_token (UUID), trial_ends_at.
+
+Models (all multitenant, scoped to one Local):
+  LocalCustomer      clientes_local   full_name, email, phone (unique per local),
+                                      is_active. NO Django user / NO login.
+                                      One person in 2 locals = 2 records.
+  LocalContainerType envases_local    name, 2-letter code, guarantee_value (CLP),
+                                      image.
+  LocalContainer     envases_local    code (unique), status: available | loaned |
+                                      damaged | lost | retired.
+  LocalLoanConfig    prestamos_local  max_loan_days (7), max_active_loans_per_customer
+                                      (3), require_guarantee, ...
+  LocalLoan          prestamos_local  container, customer (nullable = anonymous),
+                                      operator (REQUIRED), due_date (auto),
+                                      status: ACTIVE | OVERDUE | RETURNED | LOST |
+                                      CHARGED, payment_method (guarantee):
+                                      none | cash | card.
+  GuaranteePayment   prestamos_local  optional guarantee per loan (Flow/SumUp/cash).
+  LoyaltyCard        fidelizacion     points/stamps per customer. A signal awards
+                                      points when a LocalLoan becomes RETURNED.
+                                      Apple/Google Wallet passes.
+
+Current customer entry points in the web (public, no login):
+  /r/<public_signup_token>/     signup form (name + email required, phone
+                                optional) -> Flow card vaulting (masked card).
+                                clientes_local/public.py
+  /loyalty/<local_id>/          loyalty onboarding (QR in store) -> wallet pass.
+  POST /api/fidelizacion/onboard/<local_id>/   AllowAny, get_or_create
+                                LocalCustomer by phone + LoyaltyCard + WalletPass.
+Store QR codes point to those URLs, so the app can parse them to find the local.
+
+How loans work TODAY: only the OPERATOR creates them, in store, by scanning
+the container (/api/local-loans/, IsAuthenticated + the operator's local).
+Return = operator scans container -> returned_at -> RETURNED -> loyalty points.
+The customer never starts anything from their phone.
+
+Backend work the MVP needs (need approval before building in ../web):
+  - Customer account + auth: a global customer account (keyed by email)
+    linked to many LocalCustomer records; login by one-time email code that
+    returns an API token.
+  - Local discovery (not registration): public list/search of locals where
+    the carnet works (manage_clients + manage_loans = True), with address
+    for a map.
+  - Automatic link to a local: when an operator scans a carnet in a local
+    for the first time, create or reuse that local's LocalCustomer from the
+    account data (same idempotency rules as clientes_local/public.py: reuse
+    by email or phone within the local). No customer-side form.
+  - Customer carnet QR: a payload that identifies the customer without
+    exposing raw ids (signed or rotating token), and an operator-side flow in
+    the web operator panel to scan it and attach the customer to a new loan.
+  - Customer-facing endpoints: my locals, my loans (active / due soon /
+    history) across all linked LocalCustomer records.
+  - Loans must expose where the container can be returned (today: the
+    lending local only), so the app never assumes it.
+  - App config endpoint exposing global switches, starting with the card
+    switch. Needs a small new config model (no global config model exists
+    today; the only ones are per-feature: LocalLoanConfig, BzeroConfig...).
+  - Card at ACCOUNT level. Flow card vaulting already exists and must be
+    reused: pagos/services.py (ensure_flow_customer, start_card_registration,
+    reconcile_card_registration, charge_saved_card), pagos.models.FlowCustomer
+    (has_card, card_brand, card_last4), prestamos_local/guarantee.py (charges a
+    loan guarantee to the vaulted card). Today FlowCustomer.external_id is per
+    LocalCustomer ("local_customer:<id>"); for the app it must be per account
+    so one card works in every local. The Flow card page opens in an in-app
+    browser and must return to the app via deep link.
+  - Not needed for the MVP: customer-initiated requests, loyalty, push.
+
+
+7. OPEN DECISIONS (to be made with the user)
+--------------------------------------------
+  - Onboarding fields beyond name + email (phone? anything else?).
+  - How EVENTS will be modeled in the backend (reuse Local or a new entity).
+  - State management / navigation / design system packages.
+  - Push notifications (due-date reminders) — post-MVP.
+
+Update this file as those decisions get made.

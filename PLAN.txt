@@ -1,0 +1,11 @@
+Hola mira el plan para esta aplicacion es crear una aplicacion mobil multiplataforma desarrollada con la tecnologia
+de flutter, la idea principal es que sea una app con un diseno muy elevado y la idea central de esta aplicacion, es que nos 
+sirva conectandose a nuestro backend principalmente el caso de uso que hoy buscamos y perseguimos es que esta app se acople a nuestra
+logica de cuando los clientes osea usuarios de calle quieren usar retornables en un local sass que usa condevuelta, esta es logica de la app
+web para que me entiendas, entocnes la idea es que aca la persona ingrese, y pueda registrarse en un local, ya sea escanenado por qr o 
+buscando el nombre del local, obviamnte podemos hacer un onboarding breve pdeir un poco de informacion para que se registre y posteriomente
+nosotros que esta informacion se enlace con el locla donde pedira un retornable, posteriormente el cleitne pueda pedir envases retornables
+desde su telefono entonces aca el flujo debe conversar o seguir la logica de los clientes de local sass para que me entiendas. 
+si tienes dudas respecto al flujo lo conversamos, otra cosa relevante es que nosotros aca lo que buscamos crear es que la app tenga un diseno
+muy pro y avanzado siento que eso tiene que ser lo ams importante como el caso de uso es solo un mvp simple necesitamos darle ese level Up
+con un diseno superior.
