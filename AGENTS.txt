@@ -79,6 +79,34 @@ Decided (2026-09-14, see PLAN.txt):
   - Not built yet: operator-side carnet scan in the web panel (the other way
     to link an account to a local), local coordinates/category (places come
     without them; the app spreads pins on the stylized map).
+  - DUAL ROLE (2026-09-15): ONE app for end customers AND local operators
+    (e.g. cafeteria staff), Ciclico-style. NEVER show a "¿eres cliente u
+    operador?" picker or any operator copy in customer flows — it breaks the
+    UX for the everyday customer.
+      * Operators are created ONLY in the web (as today: OperadorLocal + Django
+        User with email). They log in in the app with the SAME email + code
+        flow as customers; the backend decides the role.
+      * verify-code must return a role. If the email belongs to a User with an
+        OperadorLocal -> token for THAT existing user, role "operator" (do NOT
+        create a CustomerAccount for it). Otherwise -> customer flow as today.
+        An operator without email on their User cannot use the app until an
+        admin sets one in the web.
+      * Operator mode (after login): Prestar (scan customer carnet or
+        anonymous, then container), Recibir (scan container), loans/stock of
+        the local, today's stats. Reuse /api/local-loans/ and
+        /api/local-containers/ (already scoped to the operator's local);
+        the carnet -> LocalCustomer link is new backend work.
+      * Customer self-checkout (customer scans the container) is NOT in scope.
+      * Person who is both operator and customer: later, an "Usar como
+        cliente" option in the operator profile. Not in the first version.
+      * Known backend gap: clientes_app/services.py verify_login_code always
+        creates a CustomerAccount; it must branch on OperadorLocal first.
+      * Next steps (nothing built yet): 1) backend on app-mobile-integration:
+        role in verify-code + "lend with carnet" endpoint (carnet QR +
+        container -> LocalLoan, auto-link LocalCustomer) + tests;
+        2) operator-mode design mockups (Inicio, Prestar, Recibir, Préstamos)
+        for review with the boss; 3) Flutter operator mode, routed by role
+        after login, customer screens unchanged.
   - ONE global customer account, linked to many LocalCustomer records
     (one per local the customer joined).
   - ONBOARDING HAPPENS ONCE, right after installing the app — never per
