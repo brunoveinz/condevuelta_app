@@ -169,6 +169,23 @@ Decided (2026-09-14, see PLAN.txt):
         auth_role, operator_token (kept to switch back from the carnet).
         Mock: emails starting with "operador" or "local" are operators.
         Dev seed operator: carla.demo@seed.cl ([SEED] Cafetería Volumen).
+  - OPERATOR STOCK + CUSTOMERS (2026-09-16): two read-only tabs, so the
+    operator shell now has FOUR tabs around the scan button (the bar splits
+    them in halves, so the count must stay even):
+    Inicio · Envases | [Escanear] | Clientes · Préstamos.
+      * Backend: GET /api/app/operator/containers/ (containers grouped by
+        LocalContainerType, per-status counts + totals) and GET
+        /api/app/operator/customers/?q=&page= (the local's LocalCustomers
+        annotated with open_loans/total_loans). Services live in
+        clientes_app/operators.py (stock_summary, local_customers); both
+        answer 403 containers_disabled / clients_disabled when the local
+        lacks manage_containers / manage_clients, like the web panel.
+      * App: lib/screens/operator/operator_stock_screen.dart and
+        operator_customers_screen.dart; models StockType/LocalStock and
+        LocalCustomerRow/CustomerPage; the search box is now shared as
+        OperatorSearchField in operator_widgets.dart.
+      * No detail drill-down and no editing: listing only (decided with the
+        boss). Tapping a type or a customer is the obvious next step.
   - ONE global customer account, linked to many LocalCustomer records
     (one per local the customer joined).
   - ONBOARDING HAPPENS ONCE, right after installing the app — never per
