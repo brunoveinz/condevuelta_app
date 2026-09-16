@@ -151,12 +151,102 @@ class OperatorController extends ChangeNotifier {
   void loansChanged() {
     refreshHome();
     reloadLoans();
+    // Lending and receiving move containers between available and loaned.
+    if (hasLoadedStock) reloadStock();
+    if (hasLoadedCustomers) reloadCustomers();
   }
 
   /// Replaces a loan in the list after an action on its detail.
   void replaceLoan(OperatorLoan loan) {
     loans = [for (final l in loans) l.id == loan.id ? loan : l];
     _notify();
+  }
+
+  // --- Stock ("Envases") -----------------------------------------------------
+
+  LocalStock stock = LocalStock.empty;
+  bool isLoadingStock = false;
+  bool hasLoadedStock = false;
+  String? stockError;
+
+  Future<void> reloadStock() async {
+    isLoadingStock = true;
+    stockError = null;
+    _notify();
+    try {
+      stock = await _repository.fetchOperatorStock();
+      hasLoadedStock = true;
+    } on ApiException catch (e) {
+      if (_handleAuth(e)) return;
+      stockError = e.message;
+    } finally {
+      isLoadingStock = false;
+      _notify();
+    }
+  }
+
+  // --- Customers ("Clientes") ------------------------------------------------
+
+  List<LocalCustomerRow> customers = const [];
+  int customersCount = 0;
+  String customerQuery = '';
+  bool isLoadingCustomers = false;
+  bool hasLoadedCustomers = false;
+  bool hasMoreCustomers = false;
+  String? customersError;
+  int _customerPage = 1;
+  int _customerGeneration = 0;
+
+  void setCustomerQuery(String value) {
+    if (value.trim() == customerQuery) return;
+    customerQuery = value.trim();
+    reloadCustomers();
+  }
+
+  Future<void> reloadCustomers() async {
+    final generation = ++_customerGeneration;
+    _customerPage = 1;
+    isLoadingCustomers = true;
+    customersError = null;
+    _notify();
+    try {
+      final page = await _repository.fetchOperatorCustomers(query: customerQuery);
+      if (generation != _customerGeneration) return;
+      customers = page.customers;
+      customersCount = page.count;
+      hasMoreCustomers = page.hasMore;
+      hasLoadedCustomers = true;
+    } on ApiException catch (e) {
+      if (generation != _customerGeneration || _handleAuth(e)) return;
+      customersError = e.message;
+    } finally {
+      if (generation == _customerGeneration) {
+        isLoadingCustomers = false;
+        _notify();
+      }
+    }
+  }
+
+  Future<void> loadMoreCustomers() async {
+    if (isLoadingCustomers || !hasMoreCustomers) return;
+    final generation = _customerGeneration;
+    isLoadingCustomers = true;
+    _notify();
+    try {
+      final page = await _repository.fetchOperatorCustomers(query: customerQuery, page: _customerPage + 1);
+      if (generation != _customerGeneration) return;
+      _customerPage += 1;
+      customers = [...customers, ...page.customers];
+      hasMoreCustomers = page.hasMore;
+    } on ApiException catch (e) {
+      if (generation != _customerGeneration || _handleAuth(e)) return;
+      customersError = e.message;
+    } finally {
+      if (generation == _customerGeneration) {
+        isLoadingCustomers = false;
+        _notify();
+      }
+    }
   }
 
   Future<OperatorScan> scan(String rawValue) => _guard(() => _repository.operatorScan(rawValue));

@@ -156,6 +156,49 @@ void main() {
     expect(result!.single.customer, isNotNull);
   });
 
+  testWidgets('operator sees the local stock and its customers', (tester) async {
+    late AppState state;
+    await tester.runAsync(() async => state = await signedInOperator());
+
+    await tester.pumpWidget(
+      AppScope(
+        state: state,
+        child: const MaterialApp(home: OperatorShell()),
+      ),
+    );
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    await tester.tap(find.text('Envases'));
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.text('Disponibles ahora'), findsOneWidget);
+    expect(find.text('Por modelo'), findsOneWidget);
+    expect(find.text('Bowl mediano'), findsOneWidget);
+
+    await tester.tap(find.text('Clientes'));
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.text('María Pérez'), findsOneWidget);
+    expect(find.text('Tomás Rivas'), findsOneWidget);
+  });
+
+  test('mock stock splits what is on the shelf from what is lent', () async {
+    final repository = MockRepository();
+    await repository.requestLoginCode('operador@cafe.cl');
+    await repository.verifyLoginCode(email: 'operador@cafe.cl', code: '123456');
+
+    final stock = await repository.fetchOperatorStock();
+
+    // Three of the demo loans are open (two BW, one VS).
+    expect(stock.loaned, 3);
+    expect(stock.available, stock.total - stock.loaned);
+    expect(stock.types.map((t) => t.code), containsAll(['BW', 'VS']));
+  });
+
   test('CLP amounts use dots for thousands', () {
     expect(formatClp(0), '\$0');
     expect(formatClp(3000), '\$3.000');

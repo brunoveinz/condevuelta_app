@@ -1,32 +1,34 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../data/operator_models.dart';
 import '../../state/operator_state.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/pressable.dart';
-import 'operator_loan_detail_screen.dart';
 import 'operator_widgets.dart';
 
-/// "Préstamos": every loan of the local, with filters, search and paging.
-class OperatorLoansScreen extends StatefulWidget {
-  const OperatorLoansScreen({super.key});
+/// "Clientes": everyone registered in the local, with their loan counts.
+class OperatorCustomersScreen extends StatefulWidget {
+  const OperatorCustomersScreen({super.key});
 
   @override
-  State<OperatorLoansScreen> createState() => _OperatorLoansScreenState();
+  State<OperatorCustomersScreen> createState() => _OperatorCustomersScreenState();
 }
 
-class _OperatorLoansScreenState extends State<OperatorLoansScreen> {
+class _OperatorCustomersScreenState extends State<OperatorCustomersScreen> {
   final _scroll = ScrollController();
-  late final _search = TextEditingController(text: OperatorScope.read(context).query);
+  late final _search = TextEditingController(text: OperatorScope.read(context).customerQuery);
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    final controller = OperatorScope.read(context);
+    if (!controller.hasLoadedCustomers) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => controller.reloadCustomers());
+    }
   }
 
   @override
@@ -38,13 +40,13 @@ class _OperatorLoansScreenState extends State<OperatorLoansScreen> {
   }
 
   void _onScroll() {
-    if (_scroll.position.extentAfter < 400) OperatorScope.read(context).loadMoreLoans();
+    if (_scroll.position.extentAfter < 400) OperatorScope.read(context).loadMoreCustomers();
   }
 
   void _onSearchChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 350), () {
-      if (mounted) OperatorScope.read(context).setQuery(value);
+      if (mounted) OperatorScope.read(context).setCustomerQuery(value);
     });
     setState(() {});
   }
@@ -52,22 +54,22 @@ class _OperatorLoansScreenState extends State<OperatorLoansScreen> {
   void _clearSearch() {
     _search.clear();
     _debounce?.cancel();
-    OperatorScope.read(context).setQuery('');
+    OperatorScope.read(context).setCustomerQuery('');
     setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = OperatorScope.of(context);
-    final loans = controller.loans;
-    final firstLoad = controller.isLoadingLoans && loans.isEmpty;
+    final customers = controller.customers;
+    final firstLoad = controller.isLoadingCustomers && customers.isEmpty;
 
     return SafeArea(
       bottom: false,
       child: RefreshIndicator(
         color: AppColors.pink,
         backgroundColor: AppColors.white,
-        onRefresh: controller.reloadLoans,
+        onRefresh: controller.reloadCustomers,
         child: CustomScrollView(
           controller: _scroll,
           physics: const AlwaysScrollableScrollPhysics(),
@@ -81,13 +83,14 @@ class _OperatorLoansScreenState extends State<OperatorLoansScreen> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('Préstamos', style: AppText.title),
+                        Text('Clientes', style: AppText.title),
                         const Spacer(),
                         if (!firstLoad)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 4),
                             child: Text(
-                              '${controller.loansCount} ${controller.loansCount == 1 ? 'resultado' : 'resultados'}',
+                              '${controller.customersCount} '
+                              '${controller.customersCount == 1 ? 'cliente' : 'clientes'}',
                               style: AppText.caption,
                             ),
                           ),
@@ -96,34 +99,12 @@ class _OperatorLoansScreenState extends State<OperatorLoansScreen> {
                     const SizedBox(height: 14),
                     OperatorSearchField(
                       controller: _search,
-                      hintText: 'Cliente, email o código',
+                      hintText: 'Nombre, email o teléfono',
                       onChanged: _onSearchChanged,
                       onClear: _clearSearch,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 4),
                   ],
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 40,
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: LoanFilter.values.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, i) {
-                    final filter = LoanFilter.values[i];
-                    return _FilterChip(
-                      label: filter.label,
-                      selected: filter == controller.filter,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        controller.setFilter(filter);
-                      },
-                    );
-                  },
                 ),
               ),
             ),
@@ -131,29 +112,27 @@ class _OperatorLoansScreenState extends State<OperatorLoansScreen> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
               sliver: firstLoad
                   ? SliverList.separated(
-                      itemCount: 5,
+                      itemCount: 6,
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (_, _) => const SkeletonBox(height: 76, radius: 22),
+                      itemBuilder: (_, _) => const SkeletonBox(height: 72, radius: 22),
                     )
-                  : controller.loansError != null && loans.isEmpty
+                  : controller.customersError != null && customers.isEmpty
                   ? SliverToBoxAdapter(
                       child: _Message(
                         icon: Icons.wifi_off_rounded,
-                        title: 'No pudimos cargar los préstamos',
-                        body: controller.loansError!,
+                        title: 'No pudimos cargar tus clientes',
+                        body: controller.customersError!,
                         actionLabel: 'Reintentar',
-                        onAction: controller.reloadLoans,
+                        onAction: controller.reloadCustomers,
                       ),
                     )
-                  : loans.isEmpty
-                  ? SliverToBoxAdapter(
-                      child: _EmptyResults(filter: controller.filter, query: controller.query),
-                    )
+                  : customers.isEmpty
+                  ? SliverToBoxAdapter(child: _EmptyCustomers(query: controller.customerQuery))
                   : SliverList.separated(
-                      itemCount: loans.length + (controller.hasMoreLoans ? 1 : 0),
+                      itemCount: customers.length + (controller.hasMoreCustomers ? 1 : 0),
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, i) {
-                        if (i == loans.length) {
+                        if (i == customers.length) {
                           return const Padding(
                             padding: EdgeInsets.all(16),
                             child: Center(
@@ -165,14 +144,11 @@ class _OperatorLoansScreenState extends State<OperatorLoansScreen> {
                             ),
                           );
                         }
-                        final loan = loans[i];
+                        final customer = customers[i];
                         return StaggeredIn(
-                          key: ValueKey(loan.id),
+                          key: ValueKey(customer.id),
                           index: i,
-                          child: OperatorLoanTile(
-                            loan: loan,
-                            onTap: () => pushOperatorPage(context, OperatorLoanDetailScreen(loan: loan)),
-                          ),
+                          child: _CustomerTile(customer: customer),
                         );
                       },
                     ),
@@ -184,40 +160,93 @@ class _OperatorLoansScreenState extends State<OperatorLoansScreen> {
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
+class _CustomerTile extends StatelessWidget {
+  const _CustomerTile({required this.customer});
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final LocalCustomerRow customer;
 
   @override
   Widget build(BuildContext context) {
-    return Pressable(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: AppMotion.medium,
-        curve: AppMotion.emphasized,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? AppColors.navy : AppColors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? AppColors.navy : AppColors.hairline),
-        ),
-        child: Text(
-          label,
-          style: AppText.label.copyWith(fontSize: 14, color: selected ? AppColors.white : AppColors.navy),
-        ),
+    final contact = customer.contact;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Row(
+        children: [
+          InitialAvatar(initial: customer.initial, size: 44),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  customer.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.label,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  contact.isEmpty ? 'Sin contacto' : contact,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.caption,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (customer.openLoans > 0)
+                _Pill(
+                  '${customer.openLoans} ${customer.openLoans == 1 ? 'abierto' : 'abiertos'}',
+                  AppColors.pinkMist,
+                  AppColors.pinkDark,
+                )
+              else
+                const _Pill('Al día', AppColors.hairline, AppColors.navy),
+              const SizedBox(height: 4),
+              Text(
+                '${customer.totalLoans} ${customer.totalLoans == 1 ? 'préstamo' : 'préstamos'}',
+                style: AppText.caption.copyWith(fontSize: 12),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _EmptyResults extends StatelessWidget {
-  const _EmptyResults({required this.filter, required this.query});
+class _Pill extends StatelessWidget {
+  const _Pill(this.label, this.background, this.foreground);
 
-  final LoanFilter filter;
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(12)),
+      child: Text(
+        label,
+        style: AppText.caption.copyWith(fontSize: 12, fontWeight: FontWeight.w600, color: foreground),
+      ),
+    );
+  }
+}
+
+class _EmptyCustomers extends StatelessWidget {
+  const _EmptyCustomers({required this.query});
+
   final String query;
 
   @override
@@ -226,25 +255,22 @@ class _EmptyResults extends StatelessWidget {
       return _Message(
         icon: Icons.search_off_rounded,
         title: 'Sin resultados',
-        body: 'No encontramos préstamos para "$query".',
+        body: 'No encontramos clientes para "$query".',
       );
     }
-    final (title, body) = switch (filter) {
-      LoanFilter.open => ('Nada en circulación', 'Cuando prestes un envase aparecerá aquí.'),
-      LoanFilter.overdue => ('Todo al día', 'No hay envases atrasados en tu local.'),
-      LoanFilter.returned => ('Aún no hay devoluciones', 'Los envases recibidos aparecerán aquí.'),
-      LoanFilter.closed => ('Sin préstamos cerrados', 'Aquí verás los perdidos y las garantías cobradas.'),
-      LoanFilter.all => ('Aún no hay préstamos', 'Escanea un envase para hacer el primero.'),
-    };
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: Column(
         children: [
           Image.asset('assets/images/mascota.png', width: 150),
           const SizedBox(height: 12),
-          Text(title, style: AppText.headline),
+          Text('Aún no tienes clientes', style: AppText.headline),
           const SizedBox(height: 6),
-          Text(body, style: AppText.body, textAlign: TextAlign.center),
+          Text(
+            'Cuando escanees el carnet de alguien al prestarle un envase, queda registrado aquí.',
+            style: AppText.body,
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );

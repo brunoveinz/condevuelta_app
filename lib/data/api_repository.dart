@@ -137,6 +137,19 @@ class ApiRepository implements CondevueltaRepository {
   Future<OperatorLoan> fetchOperatorLoan(int id) async => _loan(await _client.get('operator/loans/$id/'));
 
   @override
+  Future<LocalStock> fetchOperatorStock() async =>
+      LocalStock.fromJson(await _client.get('operator/containers/') as Map<String, dynamic>);
+
+  @override
+  Future<CustomerPage> fetchOperatorCustomers({String query = '', int page = 1}) async {
+    final json = await _client.get('operator/customers/', {
+      if (query.trim().isNotEmpty) 'q': query.trim(),
+      'page': '$page',
+    });
+    return CustomerPage.fromJson(json as Map<String, dynamic>);
+  }
+
+  @override
   Future<List<OperatorLoan>> lend({
     required String requestId,
     required List<String> containerCodes,

@@ -405,6 +405,143 @@ class ScannedNothing extends OperatorScan {
   const ScannedNothing();
 }
 
+/// A container type of the local with how many of its containers are where.
+class StockType {
+  const StockType({
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.guaranteeValue,
+    required this.isActive,
+    required this.available,
+    required this.loaned,
+    required this.damaged,
+    required this.lost,
+    required this.retired,
+    required this.total,
+  });
+
+  final int id;
+  final String name;
+
+  /// Two-letter code of the model ("BW", "VS").
+  final String code;
+  final int guaranteeValue;
+  final bool isActive;
+  final int available;
+  final int loaned;
+  final int damaged;
+  final int lost;
+  final int retired;
+  final int total;
+
+  /// Damaged, lost and retired: out of circulation, not lent.
+  int get unusable => damaged + lost + retired;
+
+  factory StockType.fromJson(Map<String, dynamic> json) => StockType(
+    id: json['id'] as int,
+    name: json['name'] as String,
+    code: (json['code'] as String?) ?? '',
+    guaranteeValue: (json['guarantee_value'] as int?) ?? 0,
+    isActive: (json['is_active'] as bool?) ?? true,
+    available: (json['available'] as int?) ?? 0,
+    loaned: (json['loaned'] as int?) ?? 0,
+    damaged: (json['damaged'] as int?) ?? 0,
+    lost: (json['lost'] as int?) ?? 0,
+    retired: (json['retired'] as int?) ?? 0,
+    total: (json['total'] as int?) ?? 0,
+  );
+}
+
+/// Stock of the operator's local: every container type and the totals.
+class LocalStock {
+  const LocalStock({
+    required this.types,
+    required this.available,
+    required this.loaned,
+    required this.unusable,
+    required this.total,
+  });
+
+  static const empty = LocalStock(types: [], available: 0, loaned: 0, unusable: 0, total: 0);
+
+  final List<StockType> types;
+  final int available;
+  final int loaned;
+  final int unusable;
+  final int total;
+
+  factory LocalStock.fromJson(Map<String, dynamic> json) {
+    final totals = (json['totals'] as Map<String, dynamic>?) ?? const {};
+    int count(String key) => (totals[key] as int?) ?? 0;
+    return LocalStock(
+      types: (json['types'] as List<dynamic>).map((e) => StockType.fromJson(e as Map<String, dynamic>)).toList(),
+      available: count('available'),
+      loaned: count('loaned'),
+      unusable: count('damaged') + count('lost') + count('retired'),
+      total: count('total'),
+    );
+  }
+}
+
+/// A customer of the local, as listed in the operator's "Clientes".
+class LocalCustomerRow {
+  const LocalCustomerRow({
+    required this.id,
+    required this.fullName,
+    required this.openLoans,
+    required this.totalLoans,
+    required this.isActive,
+    this.email,
+    this.phone,
+  });
+
+  final int id;
+  final String fullName;
+  final int openLoans;
+  final int totalLoans;
+  final bool isActive;
+  final String? email;
+  final String? phone;
+
+  String get displayName => fullName.trim().isEmpty ? (email ?? 'Sin nombre') : fullName.trim();
+
+  String get initial => displayName.isEmpty ? '?' : displayName[0].toUpperCase();
+
+  /// Email, or the phone when the local only took that.
+  String get contact {
+    final mail = email?.trim() ?? '';
+    if (mail.isNotEmpty) return mail;
+    return phone?.trim() ?? '';
+  }
+
+  factory LocalCustomerRow.fromJson(Map<String, dynamic> json) => LocalCustomerRow(
+    id: json['id'] as int,
+    fullName: (json['full_name'] as String?) ?? '',
+    openLoans: (json['open_loans'] as int?) ?? 0,
+    totalLoans: (json['total_loans'] as int?) ?? 0,
+    isActive: (json['is_active'] as bool?) ?? true,
+    email: json['email'] as String?,
+    phone: json['phone'] as String?,
+  );
+}
+
+class CustomerPage {
+  const CustomerPage({required this.customers, required this.count, required this.hasMore});
+
+  final List<LocalCustomerRow> customers;
+  final int count;
+  final bool hasMore;
+
+  factory CustomerPage.fromJson(Map<String, dynamic> json) => CustomerPage(
+    customers: (json['results'] as List<dynamic>)
+        .map((e) => LocalCustomerRow.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    count: json['count'] as int,
+    hasMore: json['next'] != null,
+  );
+}
+
 class ReturnResult {
   const ReturnResult({required this.loan, required this.alreadyReturned});
 

@@ -148,6 +148,54 @@ class OperatorLoanTile extends StatelessWidget {
   }
 }
 
+/// Rounded search box used by the operator's lists.
+class OperatorSearchField extends StatelessWidget {
+  const OperatorSearchField({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      textInputAction: TextInputAction.search,
+      style: AppText.body.copyWith(color: AppColors.navy),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: AppText.body,
+        prefixIcon: const Icon(Icons.search_rounded, color: AppColors.muted),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : Pressable(
+                onTap: onClear,
+                child: const Icon(Icons.close_rounded, color: AppColors.muted),
+              ),
+        filled: true,
+        fillColor: AppColors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: AppColors.hairline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: AppColors.pink, width: 1.5),
+        ),
+      ),
+    );
+  }
+}
+
 /// Round avatar with an initial.
 class InitialAvatar extends StatelessWidget {
   const InitialAvatar({

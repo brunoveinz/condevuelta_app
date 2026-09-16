@@ -67,6 +67,12 @@ abstract class CondevueltaRepository {
 
   Future<OperatorLoan> fetchOperatorLoan(int id);
 
+  /// The local's containers grouped by type (read-only stock).
+  Future<LocalStock> fetchOperatorStock();
+
+  /// The local's customers, searchable and paginated.
+  Future<CustomerPage> fetchOperatorCustomers({String query = '', int page = 1});
+
   /// Lends [containerCodes] in one checkout. Reusing [requestId] on a retry
   /// returns the same loans instead of lending twice.
   Future<List<OperatorLoan>> lend({
@@ -308,6 +314,13 @@ class MockRepository implements CondevueltaRepository {
   Future<OperatorLoan> fetchOperatorLoan(int id) => _operator((b) => b.byId(id));
 
   @override
+  Future<LocalStock> fetchOperatorStock() => _operator((b) => b.stock());
+
+  @override
+  Future<CustomerPage> fetchOperatorCustomers({String query = '', int page = 1}) =>
+      _operator((b) => b.customers(query));
+
+  @override
   Future<List<OperatorLoan>> lend({
     required String requestId,
     required List<String> containerCodes,
@@ -449,6 +462,60 @@ class _MockOperatorBackend {
   }
 
   OperatorLoan byId(int id) => _loans.firstWhere((l) => l.id == id);
+
+  /// Stock derived from the demo loans, so both views tell the same story.
+  LocalStock stock() {
+    const owned = {'BW': 14, 'VS': 22};
+    var available = 0;
+    var loaned = 0;
+    final types = <StockType>[];
+    for (final entry in owned.entries) {
+      final type = _types[entry.key]!;
+      final out = _loans.where((l) => l.isOpen && l.containerCode.startsWith(entry.key)).length;
+      final free = entry.value - out;
+      available += free;
+      loaned += out;
+      types.add(
+        StockType(
+          id: types.length + 1,
+          name: type.$1,
+          code: entry.key,
+          guaranteeValue: type.$2,
+          isActive: true,
+          available: free,
+          loaned: out,
+          damaged: 0,
+          lost: 0,
+          retired: 0,
+          total: entry.value,
+        ),
+      );
+    }
+    return LocalStock(
+      types: types,
+      available: available,
+      loaned: loaned,
+      unusable: 0,
+      total: available + loaned,
+    );
+  }
+
+  CustomerPage customers(String query) {
+    final q = query.trim().toLowerCase();
+    final rows = [
+      for (final customer in _customers)
+        LocalCustomerRow(
+          id: customer.id,
+          fullName: customer.fullName,
+          openLoans: _loans.where((l) => l.isOpen && l.customer?.id == customer.id).length,
+          totalLoans: _loans.where((l) => l.customer?.id == customer.id).length,
+          isActive: true,
+          email: customer.email,
+          phone: customer.phone,
+        ),
+    ].where((c) => q.isEmpty || '${c.fullName} ${c.contact}'.toLowerCase().contains(q)).toList();
+    return CustomerPage(customers: rows, count: rows.length, hasMore: false);
+  }
 
   List<OperatorLoan> lend(List<String> codes, String? carnetToken, GuaranteeMethod guarantee) {
     final today = DateTime.now();

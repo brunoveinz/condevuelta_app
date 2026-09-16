@@ -6,16 +6,24 @@ import '../../state/operator_state.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_tab_bar.dart';
 import 'counter_screen.dart';
+import 'operator_customers_screen.dart';
 import 'operator_home_screen.dart';
 import 'operator_loans_screen.dart';
+import 'operator_stock_screen.dart';
 
+// Even count: the bar splits them around the raised button.
 const _tabs = [
   AppTab('Inicio', Icons.storefront_outlined, Icons.storefront_rounded),
+  AppTab('Envases', Icons.inventory_2_outlined, Icons.inventory_2_rounded),
+  AppTab('Clientes', Icons.people_outline_rounded, Icons.people_rounded),
   AppTab('Préstamos', Icons.receipt_long_outlined, Icons.receipt_long_rounded),
 ];
 
-/// Operator mode: the local's home and loans, with the counter (lend / take
-/// back by scanning) on the raised button. Profile opens from the avatar.
+const _loansTab = 3;
+
+/// Operator mode: the local's home, stock, customers and loans, with the
+/// counter (lend / take back by scanning) on the raised button. Profile opens
+/// from the avatar.
 class OperatorShell extends StatefulWidget {
   const OperatorShell({super.key});
 
@@ -69,7 +77,12 @@ class _OperatorShellState extends State<OperatorShell> {
             ),
             child: KeyedSubtree(
               key: ValueKey(_index),
-              child: _index == 0 ? OperatorHomeScreen(onOpenLoans: () => _select(1)) : const OperatorLoansScreen(),
+              child: switch (_index) {
+                0 => OperatorHomeScreen(onOpenLoans: () => _select(_loansTab)),
+                1 => const OperatorStockScreen(),
+                2 => const OperatorCustomersScreen(),
+                _ => const OperatorLoansScreen(),
+              },
             ),
           ),
           // Builder: the counter needs a context below OperatorScope.
