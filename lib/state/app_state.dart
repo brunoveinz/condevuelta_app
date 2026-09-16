@@ -2,10 +2,12 @@ import 'package:flutter/widgets.dart';
 
 import '../data/api_client.dart';
 import '../data/models.dart';
+import '../data/operator_models.dart';
 import '../data/repository.dart';
 
 /// Top-level stages of the app. The tutorial runs once, right after install.
-enum AppStage { onboarding, email, code, name, ready, home }
+/// [operatorHome] is the store operator mode (same sign-in, other views).
+enum AppStage { onboarding, email, code, name, ready, home, operatorHome }
 
 /// Single source of truth for session and data. Plain ChangeNotifier to
 /// avoid extra packages (state management package still to be decided).
@@ -14,10 +16,19 @@ class AppState extends ChangeNotifier {
 
   final CondevueltaRepository _repository;
 
+  /// For feature controllers (e.g. the operator mode) that talk to the backend.
+  CondevueltaRepository get repository => _repository;
+
   AppStage stage = AppStage.onboarding;
   AppStage _previousStage = AppStage.onboarding;
   String email = '';
   Customer? customer;
+
+  /// Set when the signed-in email belongs to a store operator.
+  OperatorProfile? operator;
+
+  /// An operator is using their own customer carnet and can switch back.
+  bool canReturnToOperator = false;
   AppConfig config = const AppConfig(cardRegistrationEnabled: false);
   List<Loan> loans = const [];
   List<Place> places = const [];
@@ -50,13 +61,25 @@ class AppState extends ChangeNotifier {
   /// Picks up a stored session while the tutorial plays.
   Future<void> restoreSession() async {
     final restored = await _repository.restoreSession();
-    if (restored == null) return;
-    customer = restored;
-    email = restored.email;
+    switch (restored) {
+      case null:
+        return;
+      case OperatorSession(:final profile):
+        operator = profile;
+        email = profile.email;
+      case CustomerSession(customer: final restoredCustomer, :final canReturnToOperator):
+        customer = restoredCustomer;
+        email = restoredCustomer.email;
+        this.canReturnToOperator = canReturnToOperator;
+    }
     notifyListeners();
   }
 
-  void finishOnboarding() => _goTo(customer == null ? AppStage.email : AppStage.home);
+  void finishOnboarding() => _goTo(switch ((operator, customer)) {
+        (OperatorProfile(), _) => AppStage.operatorHome,
+        (_, Customer()) => AppStage.home,
+        _ => AppStage.email,
+      });
 
   void backTo(AppStage target) => _goTo(target);
 
@@ -79,15 +102,24 @@ class AppState extends ChangeNotifier {
   Future<bool> verifyCode(String code) async {
     var ok = false;
     await _run(() async {
-      final result = await _repository.verifyLoginCode(email: email, code: code);
-      customer = result.customer;
+      final session = await _repository.verifyLoginCode(email: email, code: code);
       ok = true;
-      isReturning = !result.isNewAccount;
-      if (result.customer.name.isEmpty) {
-        _goTo(AppStage.name);
-      } else {
-        justSignedUp = result.isNewAccount;
-        _goTo(AppStage.ready);
+      switch (session) {
+        case OperatorSession(:final profile):
+          operator = profile;
+          customer = null;
+          _goTo(AppStage.operatorHome);
+        case CustomerSession(customer: final signedIn, :final isNewAccount):
+          customer = signedIn;
+          operator = null;
+          canReturnToOperator = false;
+          isReturning = !isNewAccount;
+          if (signedIn.name.isEmpty) {
+            _goTo(AppStage.name);
+          } else {
+            justSignedUp = isNewAccount;
+            _goTo(AppStage.ready);
+          }
       }
     });
     return ok;
@@ -150,9 +182,43 @@ class AppState extends ChangeNotifier {
   void signOut() {
     _repository.signOut();
     customer = null;
+    operator = null;
+    canReturnToOperator = false;
     email = '';
     loans = const [];
     _goTo(AppStage.email);
+  }
+
+  /// Operator opens their own customer carnet (same email, no new sign-in).
+  Future<void> switchToCustomer() => _run(() async {
+        customer = await _repository.switchToCustomer();
+        canReturnToOperator = true;
+        operator = null;
+        loans = const [];
+        _goTo(customer!.name.isEmpty ? AppStage.name : AppStage.home);
+      });
+
+  /// Back from the customer carnet to the operator mode.
+  Future<void> switchToOperator() => _run(() async {
+        try {
+          operator = await _repository.switchToOperator();
+        } on ApiException catch (e) {
+          if (e.isUnauthorized) {
+            signOut();
+            return;
+          }
+          rethrow;
+        }
+        customer = null;
+        canReturnToOperator = false;
+        loans = const [];
+        _goTo(AppStage.operatorHome);
+      });
+
+  /// The operator profile changed (e.g. refreshed from the backend).
+  void updateOperator(OperatorProfile profile) {
+    operator = profile;
+    notifyListeners();
   }
 
   Future<void> _run(Future<void> Function() action) async {
