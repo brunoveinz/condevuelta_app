@@ -14,6 +14,7 @@ import '../widgets/place_badge.dart';
 import '../widgets/pressable.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/qr_code.dart';
+import '../widgets/scanner_overlay.dart';
 
 enum QrHubMode { myQr, scan }
 
@@ -417,7 +418,7 @@ class _ScanViewState extends State<_ScanView> with SingleTickerProviderStateMixi
               child: AnimatedBuilder(
                 animation: _corners,
                 builder: (context, _) => CustomPaint(
-                  painter: _ScannerOverlayPainter(
+                  painter: ScannerOverlayPainter(
                     cutout: _cutout,
                     pulse: Curves.easeInOut.transform(_corners.value),
                   ),
@@ -496,42 +497,6 @@ class _ScanViewState extends State<_ScanView> with SingleTickerProviderStateMixi
       ),
     );
   }
-}
-
-/// Dims everything but a rounded square, with pink corner brackets that breathe.
-class _ScannerOverlayPainter extends CustomPainter {
-  _ScannerOverlayPainter({required this.cutout, required this.pulse});
-
-  final double cutout;
-  final double pulse;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final side = cutout + 8 * pulse;
-    final rect = Rect.fromCenter(center: size.center(const Offset(0, -30)), width: side, height: side);
-    final hole = RRect.fromRectAndRadius(rect, const Radius.circular(28));
-    canvas.drawPath(
-      Path.combine(PathOperation.difference, Path()..addRect(Offset.zero & size), Path()..addRRect(hole)),
-      Paint()..color = AppColors.navy.withValues(alpha: 0.55),
-    );
-
-    final paint = Paint()
-      ..color = AppColors.pink
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.round;
-    const arm = 34.0;
-    const r = 28.0;
-    final l = rect.left, t = rect.top, rt = rect.right, b = rect.bottom;
-    canvas
-      ..drawPath(Path()..moveTo(l, t + arm)..lineTo(l, t + r)..arcToPoint(Offset(l + r, t), radius: const Radius.circular(r))..lineTo(l + arm, t), paint)
-      ..drawPath(Path()..moveTo(rt - arm, t)..lineTo(rt - r, t)..arcToPoint(Offset(rt, t + r), radius: const Radius.circular(r))..lineTo(rt, t + arm), paint)
-      ..drawPath(Path()..moveTo(rt, b - arm)..lineTo(rt, b - r)..arcToPoint(Offset(rt - r, b), radius: const Radius.circular(r))..lineTo(rt - arm, b), paint)
-      ..drawPath(Path()..moveTo(l + arm, b)..lineTo(l + r, b)..arcToPoint(Offset(l, b - r), radius: const Radius.circular(r))..lineTo(l, b - arm), paint);
-  }
-
-  @override
-  bool shouldRepaint(_ScannerOverlayPainter old) => old.pulse != pulse || old.cutout != cutout;
 }
 
 class _CameraError extends StatelessWidget {

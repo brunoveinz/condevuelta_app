@@ -3,35 +3,68 @@ AGENTS.txt — Condevuelta Mobile App
 
 Guidance for any AI coding agent working in this directory.
 
-Status: Flutter MVP UI built on MOCK DATA (2026-09-14). Read PLAN.txt (the
-user's product brief) first.
+Status (2026-09-16): Flutter app with TWO modes on the real backend API
+(../web branch app-mobile-integration, Django app clientes_app):
+  - Customer mode: carnet QR, my loans, locals, scanner.
+  - Operator mode: lend / receive containers by scanning, loans list and
+    detail (see "OPERATOR MODE" below).
+Read PLAN.txt (the user's product brief) first.
 
 Run it:
   export PATH="$HOME/development/flutter/bin:$PATH"   (Flutter 3.47, Dart 3.13)
   ~/Android/Sdk/emulator/emulator -avd uniformados_pixel &
   flutter run -d emulator-5554
   flutter analyze
+  flutter test
+  The emulator has no camera: use the "Código" button in the counter to type
+  QR values (container codes or a carnet token CDV-...).
+  Local backend: ../web docker compose (container web-web-1). In DEBUG the
+  login code is logged: docker logs web-web-1 2>&1 | grep "Login code".
+
+Working from another PC (checklist):
+  1. git pull both repos (mobile: main; ../web: app-mobile-integration).
+  2. ../web: python manage.py migrate  (clientes_app has 0001-0003; 0003 =
+     OperatorLoanBatch, operator mode).
+  3. Backend tests to run by hand (never by an agent):
+     pytest clientes_app/ prestamos_local/guarantee_tests.py
+  4. mobile: flutter pub get; flutter analyze; flutter test.
 
 Layout (lib/):
-  main.dart                 app + stage switcher (tutorial -> login -> home)
+  main.dart                 app + stage switcher (tutorial -> login -> home |
+                            operatorHome)
+  config/env.dart           API base URL / USE_MOCK (--dart-define)
   theme/app_theme.dart      brand colors, type ramp, motion curves
   data/models.dart          Customer, Place (~Local), Loan (~LocalLoan), AppConfig
-  data/repository.dart      CondevueltaRepository interface + MockRepository
-  state/app_state.dart      AppState (ChangeNotifier) + AppScope (InheritedNotifier)
-  screens/                  onboarding, auth (email/code/name), home_shell,
-                            carnet, loans, places, profile
+  data/operator_models.dart OperatorProfile, OperatorSummary, OperatorLoan,
+                            CarnetCustomer, StockContainer, OperatorScan...
+  data/api_client.dart      JSON client for /api/app/ (ApiException w/ code)
+  data/api_repository.dart  real backend; session role in secure storage
+  data/repository.dart      CondevueltaRepository interface, Session
+                            (CustomerSession | OperatorSession), newRequestId,
+                            MockRepository (+ in-memory operator local)
+  state/app_state.dart      AppState (session, role, switch customer<->operator)
+  state/operator_state.dart OperatorController + OperatorScope (operator mode)
+  screens/                  onboarding, auth (email/code/name), ready,
+                            home_shell, home, qr_hub, loans, places, profile
+  screens/operator/         operator_shell, operator_home, counter_screen
+                            (scanner Prestar/Recibir), lend_review_sheet
+                            (+ success view), operator_loans, loan_detail,
+                            operator_profile, operator_widgets
   widgets/                  pressable, primary_button, qr_code, countdown_ring,
-                            loan_tile, brand
+                            loan_tile, brand, place_badge, app_tab_bar (shared
+                            by both shells), scanner_overlay (shared painter)
   utils/date_format.dart    Spanish dates without intl
+  utils/money.dart          formatClp ("$3.000")
+Tests: test/qr_hub_screen_test.dart, test/operator_mode_test.dart (mock repo).
 Assets: assets/fonts (Baloo, Outfit from ../web), assets/images (mascota.png,
 logo_mark.png rendered from ../web logonew.svg).
 
 Known placeholders:
-  - MockRepository: swap for an ApiRepository when the customer endpoints exist.
-  - QrCode paints a QR-looking pattern, NOT a scannable QR (needs a QR package,
-    pending approval).
-  - The tutorial shows every launch (persisting "seen" needs shared_preferences,
-    pending approval). Session is not persisted either (needs secure storage).
+  - The tutorial shows every launch, also for operators (persisting "seen"
+    needs shared_preferences, pending approval). The session IS persisted
+    (flutter_secure_storage).
+  - Operator mode camera scanning not yet tested on a real device (only
+    manual code entry on the emulator).
   - "Agregar tarjeta" and "Ayuda" show a "coming soon" message.
 
 Decided (2026-09-14, see PLAN.txt):
@@ -76,37 +109,66 @@ Decided (2026-09-14, see PLAN.txt):
     that uses the app), container (LocalContainer.code, bare or at the end of
     a URL / ?code=), customer (someone's QR) or unknown. Add new QR kinds
     (events...) in ../web clientes_app/scan.py, not in the app.
-  - Not built yet: operator-side carnet scan in the web panel (the other way
-    to link an account to a local), local coordinates/category (places come
+  - Not built yet: operator-side carnet scan in the WEB panel (the app's
+    operator mode already does it), local coordinates/category (places come
     without them; the app spreads pins on the stylized map).
   - DUAL ROLE (2026-09-15): ONE app for end customers AND local operators
     (e.g. cafeteria staff), Ciclico-style. NEVER show a "¿eres cliente u
     operador?" picker or any operator copy in customer flows — it breaks the
     UX for the everyday customer.
-      * Operators are created ONLY in the web (as today: OperadorLocal + Django
-        User with email). They log in in the app with the SAME email + code
-        flow as customers; the backend decides the role.
-      * verify-code must return a role. If the email belongs to a User with an
-        OperadorLocal -> token for THAT existing user, role "operator" (do NOT
-        create a CustomerAccount for it). Otherwise -> customer flow as today.
-        An operator without email on their User cannot use the app until an
-        admin sets one in the web.
-      * Operator mode (after login): Prestar (scan customer carnet or
-        anonymous, then container), Recibir (scan container), loans/stock of
-        the local, today's stats. Reuse /api/local-loans/ and
-        /api/local-containers/ (already scoped to the operator's local);
-        the carnet -> LocalCustomer link is new backend work.
-      * Customer self-checkout (customer scans the container) is NOT in scope.
-      * Person who is both operator and customer: later, an "Usar como
-        cliente" option in the operator profile. Not in the first version.
-      * Known backend gap: clientes_app/services.py verify_login_code always
-        creates a CustomerAccount; it must branch on OperadorLocal first.
-      * Next steps (nothing built yet): 1) backend on app-mobile-integration:
-        role in verify-code + "lend with carnet" endpoint (carnet QR +
-        container -> LocalLoan, auto-link LocalCustomer) + tests;
-        2) operator-mode design mockups (Inicio, Prestar, Recibir, Préstamos)
-        for review with the boss; 3) Flutter operator mode, routed by role
-        after login, customer screens unchanged.
+  - OPERATOR MODE (decided 2026-09-16): the same app also serves store
+    operators (OperadorLocal). SAME login (email + one-time code); the
+    backend detects that the email belongs to an operator and the app
+    switches to the operator views.
+      * Operators keep their existing Django User (User -> Persona ->
+        OperadorLocal -> Local). verify-code must return THAT user's token
+        and a role, never create a customer account for them.
+      * Email that is both operator and customer: opens in operator mode by
+        default; Perfil has a switch to "modo cliente" without logging in
+        again.
+      * MVP scope: lend (scan the customer's carnet — or no customer — then
+        the container(s), pick the guarantee, confirm; scanning the carnet
+        creates/reuses that local's LocalCustomer + CustomerAccountLink
+        source=carnet), return (scan container), loans list/search/detail
+        (mark lost), guarantee (none/cash/card at creation; "cobrar
+        garantía" to the saved card from the loan detail, as in the web).
+      * Every operator of a local has the same access (es_administrador
+        changes nothing in the app for now).
+      * The API must honour the same rules as the web: local blocked
+        (is_active_trial=False), monthly quota (QUOTA_EXCEEDED),
+        manage_loans, max active loans per customer.
+    Decisions taken while building (2026-09-16):
+      * Operator open-loan limit counts ACTIVE + OVERDUE (the web counts
+        only ACTIVE).
+      * Guarantee "card" is only selectable when the customer's LocalCustomer
+        in that local has a saved Flow card; the charge happens later from
+        the loan detail (closes the loan as CHARGED, like the web).
+      * Receiving is retry-safe: scanning an already returned container
+        (same day) answers already_returned instead of an error.
+    BUILT (2026-09-16):
+      * Backend (../web branch app-mobile-integration, clientes_app):
+        operators.py (services), api/operator_views.py, operator_tests.py,
+        model OperatorLoanBatch (migration 0003, request_id = retry-safe
+        checkout). verify-code now returns role customer|operator.
+        prestamos_local/guarantee.py: charge logic extracted into
+        charge_guarantee(loan), shared by the web view and the app.
+        Endpoints under /api/app/operator/: me/, logout/,
+        switch-to-customer/, summary/, scan/ (carnet or container),
+        loans/ (GET list ?status=open|overdue|returned|closed|all&q=&page=,
+        POST checkout {request_id, containers[], carnet_token?,
+        payment_method, notes}), loans/<id>/, loans/<id>/return/,
+        loans/<id>/mark-lost/, loans/<id>/charge-guarantee/,
+        returns/ {code: raw QR}. An email shared by several operator users
+        is refused (no operator login). The LocalCustomer is created/linked
+        at checkout, not when the carnet is scanned.
+      * App: lib/data/operator_models.dart, lib/state/operator_state.dart
+        (OperatorController + OperatorScope), lib/screens/operator/
+        (shell: Inicio · [Escanear] · Préstamos, profile from the avatar;
+        counter_screen = live scanner Prestar/Recibir; lend_review_sheet;
+        loans list; loan detail; profile). Secure storage keys: auth_token,
+        auth_role, operator_token (kept to switch back from the carnet).
+        Mock: emails starting with "operador" or "local" are operators.
+        Dev seed operator: carla.demo@seed.cl ([SEED] Cafetería Volumen).
   - ONE global customer account, linked to many LocalCustomer records
     (one per local the customer joined).
   - ONBOARDING HAPPENS ONCE, right after installing the app — never per
@@ -149,11 +211,13 @@ Decided (2026-09-14, see PLAN.txt):
     If a local requires a guarantee and the customer has no card, the loan is
     NOT blocked: the operator can take the guarantee in cash (as the web
     already allows). The app may suggest adding a card, never force it.
-  - Current code uses ONLY the Flutter SDK (no pub packages beyond the
-    template). State = ChangeNotifier + InheritedNotifier; navigation = a
-    stage switcher + tabs.
-Not decided yet: state management package, packages (qr, secure storage,
-shared_preferences, http), backend changes. Ask before adding any package.
+  - State = ChangeNotifier + InheritedNotifier; navigation = a stage switcher
+    + tabs (customer: Inicio · Envases · [QR] · Locales · Perfil; operator:
+    Inicio · [Escanear] · Préstamos). Operator routes are pushed with
+    pushOperatorPage() so they keep OperatorScope.
+Not decided yet: state management package, shared_preferences. Approved so
+far: http, flutter_secure_storage, mobile_scanner, qr_flutter. Ask before
+adding any other package.
 
 
 1. WHAT CONDEVUELTA IS

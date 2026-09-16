@@ -106,6 +106,18 @@ class ProfileScreen extends StatelessWidget {
             ),
             child: Column(
               children: [
+                if (state.canReturnToOperator) ...[
+                  _Row(
+                    icon: Icons.storefront_rounded,
+                    label: 'Volver al modo local',
+                    onTap: () async {
+                      await state.switchToOperator();
+                      if (context.mounted && state.errorMessage != null) _comingSoon(context, state.errorMessage!);
+                    },
+                    color: AppColors.pink,
+                  ),
+                  const Divider(height: 1, indent: 58, color: AppColors.hairline),
+                ],
                 _Row(icon: Icons.auto_awesome_rounded, label: 'Ver el tutorial de nuevo', onTap: state.replayTutorial),
                 const Divider(height: 1, indent: 58, color: AppColors.hairline),
                 _Row(icon: Icons.help_outline_rounded, label: 'Ayuda', onTap: () => _comingSoon(context, 'Pronto: centro de ayuda.')),

@@ -6,10 +6,13 @@ import 'package:http/http.dart' as http;
 
 /// A failed API call. [message] is user-facing (Spanish).
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode});
+  const ApiException(this.message, {this.statusCode, this.code});
 
   final String message;
   final int? statusCode;
+
+  /// Machine-readable reason sent by some endpoints (e.g. `QUOTA_EXCEEDED`).
+  final String? code;
 
   bool get isUnauthorized => statusCode == 401;
 
@@ -17,7 +20,7 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode): $message';
 }
 
-/// Thin JSON client for the customer endpoints under /api/app/.
+/// Thin JSON client for the app endpoints under /api/app/ (customers and operators).
 class ApiClient {
   ApiClient({required String baseUrl, http.Client? httpClient})
       : _base = Uri.parse('$baseUrl/api/app/'),
@@ -31,14 +34,16 @@ class ApiClient {
   /// DRF token, sent as `Authorization: Token <token>` when set.
   String? token;
 
-  Future<dynamic> get(String path) => _send('GET', path);
+  Future<dynamic> get(String path, [Map<String, String>? query]) => _send('GET', path, null, query);
 
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) => _send('POST', path, body);
 
   Future<dynamic> patch(String path, Map<String, dynamic> body) => _send('PATCH', path, body);
 
-  Future<dynamic> _send(String method, String path, [Map<String, dynamic>? body]) async {
-    final request = http.Request(method, _base.resolve(path))
+  Future<dynamic> _send(String method, String path, [Map<String, dynamic>? body, Map<String, String>? query]) async {
+    var uri = _base.resolve(path);
+    if (query != null && query.isNotEmpty) uri = uri.replace(queryParameters: query);
+    final request = http.Request(method, uri)
       ..headers['Accept'] = 'application/json';
     if (token != null) request.headers['Authorization'] = 'Token $token';
     if (body != null) {
@@ -61,7 +66,8 @@ class ApiClient {
     final decoded = text.isEmpty ? null : _tryDecode(text);
     final status = response.statusCode;
     if (status >= 200 && status < 300) return decoded;
-    throw ApiException(_errorMessage(status, decoded), statusCode: status);
+    final code = decoded is Map && decoded['code'] is String ? decoded['code'] as String : null;
+    throw ApiException(_errorMessage(status, decoded), statusCode: status, code: code);
   }
 
   static dynamic _tryDecode(String text) {
@@ -77,7 +83,7 @@ class ApiClient {
       case 401:
         return 'Tu sesión expiró. Vuelve a entrar.';
       case 403:
-        return 'No tienes permisos para hacer esto.';
+        return _firstMessage(body) ?? 'No tienes permisos para hacer esto.';
       case 429:
         return 'Demasiados intentos. Espera un momento y vuelve a probar.';
     }

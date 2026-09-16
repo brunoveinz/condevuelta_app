@@ -8,6 +8,7 @@ import 'data/repository.dart';
 import 'screens/auth_screens.dart';
 import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/operator/operator_shell.dart';
 import 'screens/ready_screen.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
@@ -80,6 +81,7 @@ class _StageSwitcher extends StatelessWidget {
           AppStage.name => const NameScreen(),
           AppStage.ready => const ReadyScreen(),
           AppStage.home => const HomeShell(),
+          AppStage.operatorHome => const OperatorShell(),
         },
       ),
     );
