@@ -466,3 +466,62 @@ Backend work the MVP needs (need approval before building in ../web):
   - Push notifications (due-date reminders) — post-MVP.
 
 Update this file as those decisions get made.
+
+
+8. APP STORE / PLAY REVIEW READINESS (audited 2026-09-16)
+---------------------------------------------------------
+Nothing found here risks the DEVELOPER ACCOUNT: these are review
+rejections, not policy strikes (accounts get banned for fraud, spam or
+repeat offences). But the app as it stands WILL be rejected.
+
+Hard blockers:
+  - NO PRIVACY POLICY EXISTS. ../web only serves /terminos/; there is no
+    privacy page, view or template anywhere. Both stores require that URL
+    in the submission form, so the app cannot even be submitted.
+  - NO ACCOUNT DELETION. profile_screen.dart offers only "Ver el tutorial
+    de nuevo" / "Ayuda" / "Cerrar sesión", and clientes_app has no delete
+    endpoint. Apple 5.1.1(v) requires in-app deletion from any app that
+    creates accounts, and Play requires a deletion path too. This is the
+    one hard blocker that is real code work.
+  - THE ANDROID RELEASE IS SIGNED WITH DEBUG KEYS (the template TODO in
+    android/app/build.gradle.kts). Play refuses the upload.
+
+Likely rejections, smaller:
+  - "Coming soon" placeholders: Ayuda and card registration both call
+    _comingSoon (profile_screen.dart). Apple rejects those under 2.1
+    (App Completeness) — implement or hide them for the submission.
+  - "Términos" and "Política de privacidad" in auth_screens.dart are
+    styled TextSpans with no recognizer, and url_launcher is not even a
+    dependency: they look like links and do nothing, on the signup screen.
+  - Operator mode needs DEMO CREDENTIALS in the review notes. Login is by
+    email code, so without a working operator account the reviewer cannot
+    see half the app.
+  - Landscape is enabled on iPhone (ios/Runner/Info.plist) although the
+    design is portrait-only. Prefer portrait-only over broken rotation.
+  - The tutorial still shows on every launch (no shared_preferences). Not
+    a rejection on its own, but it reads as a beta.
+
+Verified fine — do not "fix" these:
+  - targetSdkVersion 36, compileSdk 35/36 (Flutter 3.47.4 defaults): above
+    what Play requires.
+  - Camera: Android inherits the permission from mobile_scanner's manifest,
+    and NSCameraUsageDescription is present AND explains the purpose, which
+    is the usual cause of camera rejections.
+  - Bundle ids cl.condevuelta.condevuelta, iOS deployment target 15.0,
+    1024px icon and launch screen all in place.
+  - ATS: release talks https to condevuelta.cl, and plain HTTP is limited
+    to the local network for the dev backend.
+  - No tracking SDKs at all (http, flutter_secure_storage, mobile_scanner,
+    qr_flutter), which keeps the privacy declarations short.
+  - Container guarantees are PHYSICAL goods, so Apple's in-app purchase
+    rule (3.1.1, digital content only) does not apply to the Flow charges.
+
+Console paperwork, not code: App Privacy in App Store Connect and Play's
+Data Safety form, declaring email, name and loan history. iOS also lacks
+DEVELOPMENT_TEAM and ITSAppUsesNonExemptEncryption (the second one only
+means App Store Connect asks on every upload).
+
+Blocking before launch, unrelated to the stores: the SMTP password is
+committed in plain text in ../web condevuelta/settings.py and login codes
+go out over Gmail SMTP, which will throttle at real volume (PLAN.txt
+already says Amazon SES before launch).
